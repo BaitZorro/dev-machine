@@ -220,7 +220,14 @@ function Invoke-Export {
     Copy-Item $PROFILE -Destination (Join-Path $psExport "Microsoft.PowerShell_profile.ps1") -Force
     Write-Host "Exported PowerShell profile"
   } else {
-    Write-Warning "PowerShell profile not found at $PROFILE"
+    # Copy default profile from repo if user has no profile
+    $defaultProfile = Join-Path $repoRoot "dotfiles\powershell\Microsoft.PowerShell_profile.ps1"
+    if (Test-Path $defaultProfile) {
+      Copy-Item $defaultProfile -Destination (Join-Path $psExport "Microsoft.PowerShell_profile.ps1") -Force
+      Write-Host "No user profile found. Exported default profile from repo."
+    } else {
+      Write-Warning "PowerShell profile not found at $PROFILE and no default in repo."
+    }
   }
   
   # Export Git config
