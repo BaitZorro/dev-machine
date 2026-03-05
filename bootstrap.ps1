@@ -5,11 +5,12 @@
   Usage:
     bootstrap.ps1 setup <path-to-configroot>   # Install and configure using config from path
     bootstrap.ps1 export <path-to-configroot>  # Export current settings to config path
+    bootstrap.ps1 upgrade                       # Update all installed applications
 #>
 [CmdletBinding()]
 param(
   [Parameter(Position=0)]
-  [ValidateSet("setup", "export")]
+  [ValidateSet("setup", "export", "upgrade")]
   [string]$Command = "setup",
   
   [Parameter(Position=1)]
@@ -140,22 +141,46 @@ function Invoke-Export {
   # Export VS Code extensions list
   if (Get-Command code -ErrorAction SilentlyContinue) {
     Write-Host "Exporting VS Code extensions list..."
-    $extensions = code --list-extensions
+    $extensions = @(code --list-extensions)
     
-    # Load existing config or create new
-    $configFile = Join-Path $configDir "winget-packages.json"
-    if (Test-Path $configFile) {
-      $config = Get-Content $configFile -Raw | ConvertFrom-Json
-    } else {
-      $config = @{
-        packages = @()
-        vscodeExtensions = @()
+    $extensionsFile = Join-Path $configDir "vscode-extensions.json"
+    @{ extensions = $extensions } | ConvertTo-Json -Depth 10 | Set-Content $extensionsFile -Encoding UTF8
+    Write-Host "Exported VS Code extensions to: vscode-extensions.json"
+  } else {
+    Write-Warning "VS Code CLI ('code') not found. Skipping extensions export."
+  }
+  
+  # Export installed WinGet packages
+  Write-Section "Export WinGet Packages"
+  if (Get-Command winget -ErrorAction SilentlyContinue) {
+    Write-Host "Exporting installed WinGet packages..."
+    
+    try {
+      # Get installed packages in JSON format
+      $installedJson = winget export -o - --accept-source-agreements 2>$null
+      if ($installedJson) {
+        $packagesFile = Join-Path $configDir "winget-packages.json"
+        $installedJson | Set-Content $packagesFile -Encoding UTF8
+        Write-Host "Exported WinGet packages to: winget-packages.json"
+      } else {
+        # Fallback: parse list output
+        Write-Host "Using fallback method to export packages..."
+        $packages = @()
+        $listOutput = winget list --accept-source-agreements 2>$null | Select-Object -Skip 2
+        foreach ($line in $listOutput) {
+          if ($line -match '^\s*(.+?)\s{2,}(\S+)\s') {
+            $packages += @{ name = $Matches[1].Trim(); id = $Matches[2].Trim() }
+          }
+        }
+        $packagesFile = Join-Path $configDir "winget-packages.json"
+        @{ packages = $packages } | ConvertTo-Json -Depth 10 | Set-Content $packagesFile -Encoding UTF8
+        Write-Host "Exported WinGet packages to: winget-packages.json"
       }
+    } catch {
+      Write-Warning "Failed to export WinGet packages: $($_.Exception.Message)"
     }
-    
-    $config.vscodeExtensions = @($extensions)
-    $config | ConvertTo-Json -Depth 10 | Set-Content $configFile -Encoding UTF8
-    Write-Host "Exported VS Code extensions to config"
+  } else {
+    Write-Warning "WinGet not found. Skipping packages export."
   }
   
   # Export PowerShell profile
@@ -188,7 +213,8 @@ function Invoke-Export {
   Write-Host "  - dotfiles/vscode/"
   Write-Host "  - dotfiles/powershell/"
   Write-Host "  - dotfiles/git/"
-  Write-Host "  - config/winget-packages.json (extensions list)"
+  Write-Host "  - config/winget-packages.json"
+  Write-Host "  - config/vscode-extensions.json"
   
   # Export WSL dotfiles
   Export-WSLDotfiles -ConfigRoot $ConfigRoot
@@ -341,8 +367,6 @@ function Invoke-Setup {
     [switch]$Minimal,
     [switch]$SkipDocker,
     [switch]$SkipWSL,
-    [switch]$SkipSpotify,
-    [switch]$OnlySpotify,
     [switch]$NoWSLProvision,
     [string]$DotfilesRepo
   )
@@ -412,6 +436,85 @@ function Invoke-Setup {
 }
 
 # ============================================================================
+# UPGRADE COMMAND
+# ============================================================================
+function Invoke-Upgrade {
+  param(
+    [string]$ConfigRoot,
+    [string]$ConfigPath,
+    [switch]$SkipWSL
+  )
+  
+  Write-Section "Upgrade Applications"
+  
+  if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+    throw "WinGet not found. Install 'App Installer' from Microsoft Store, then re-run."
+  }
+  
+  # Update WinGet sources
+  Write-Section "Update WinGet sources"
+  try { winget source update | Out-Host } catch { Write-Warning $_.Exception.Message }
+  
+  # Upgrade all winget packages
+  Write-Section "Upgrade WinGet packages"
+  Write-Host "Checking for updates..."
+  
+  try {
+    # List available upgrades first
+    $upgrades = winget upgrade --include-unknown 2>$null
+    Write-Host $upgrades
+    
+    # Perform upgrade with user confirmation
+    Write-Host ""
+    Write-Host "Upgrading all packages..." -ForegroundColor Yellow
+    winget upgrade --all --silent --accept-source-agreements --accept-package-agreements | Out-Host
+  } catch {
+    Write-Warning "WinGet upgrade encountered issues: $($_.Exception.Message)"
+  }
+  
+  # Upgrade VS Code extensions
+  if (Get-Command code -ErrorAction SilentlyContinue) {
+    Write-Section "Upgrade VS Code Extensions"
+    Write-Host "Updating VS Code extensions..."
+    
+    $configDir = Split-Path -Parent $ConfigPath
+    $extensionsFile = Join-Path $configDir "vscode-extensions.json"
+    
+    if (Test-Path $extensionsFile) {
+      $extConfig = Get-Content $extensionsFile -Raw | ConvertFrom-Json
+      $extensions = @($extConfig.extensions)
+      
+      foreach ($ext in $extensions) {
+        try {
+          code --install-extension $ext --force 2>&1 | Out-Null
+        } catch {
+          Write-Warning "Failed updating VS Code extension $ext"
+        }
+      }
+      Write-Host "VS Code extensions updated."
+    } else {
+      Write-Host "No vscode-extensions.json found. Skipping."
+    }
+  }
+  
+  # Upgrade WSL packages
+  if (-not $SkipWSL -and (Test-WSLAvailable)) {
+    Write-Section "Upgrade WSL Packages"
+    Write-Host "Updating apt packages in WSL..."
+    
+    try {
+      Invoke-WSLCommand -Command "sudo apt-get update -y && sudo apt-get upgrade -y && sudo apt-get autoremove -y"
+      Write-Host "WSL packages updated."
+    } catch {
+      Write-Warning "WSL upgrade encountered issues: $($_.Exception.Message)"
+    }
+  }
+  
+  Write-Section "Upgrade Complete"
+  Write-Host "All applications have been updated."
+}
+
+# ============================================================================
 # MAIN EXECUTION
 # ============================================================================
 switch ($Command) {
@@ -430,5 +533,11 @@ switch ($Command) {
       -OnlySpotify:$OnlySpotify `
       -NoWSLProvision:$NoWSLProvision `
       -DotfilesRepo $DotfilesRepo
+  }
+  "upgrade" {
+    Invoke-Upgrade `
+      -ConfigRoot $ConfigRoot `
+      -ConfigPath $configPath `
+      -SkipWSL:$SkipWSL
   }
 }

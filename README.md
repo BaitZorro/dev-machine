@@ -45,7 +45,8 @@ This will create/update:
 - `dotfiles/powershell/` — PowerShell profile
 - `dotfiles/git/` — Git configuration
 - `dotfiles/wsl/` — WSL dotfiles (see below)
-- `config/winget-packages.json` — VS Code extensions list
+- `config/winget-packages.json` — Installed WinGet packages
+- `config/vscode-extensions.json` — Installed VS Code extensions
 
 ### WSL Dotfiles
 
@@ -72,6 +73,20 @@ If Spotify fails (common when running elevated), run it separately in a **non-ad
 
 ```powershell
 .\bootstrap.ps1 setup -OnlySpotify
+```
+
+### Upgrade installed applications
+
+Update all installed applications (WinGet packages, VS Code extensions, and WSL apt packages):
+
+```powershell
+.\bootstrap.ps1 upgrade
+```
+
+Use `-SkipWSL` to skip updating WSL packages:
+
+```powershell
+.\bootstrap.ps1 upgrade -SkipWSL
 ```
 
 ## Repo structure

@@ -21,16 +21,25 @@ if (Test-Path $dotVscode) {
 
 # Extensions
 if (Get-Command code -ErrorAction SilentlyContinue) {
-  $config = Get-Content $ConfigPath -Raw | ConvertFrom-Json
-  if ($config.vscodeExtensions) {
-    Write-Host "Installing VS Code extensions..."
-    foreach ($ext in $config.vscodeExtensions) {
-      try {
-        code --install-extension $ext --force | Out-Host
-      } catch {
-        Write-Warning "Failed installing VS Code extension $ext: $($_.Exception.Message)"
+  $configDir = Split-Path -Parent $ConfigPath
+  $extensionsFile = Join-Path $configDir "vscode-extensions.json"
+  
+  if (Test-Path $extensionsFile) {
+    $extConfig = Get-Content $extensionsFile -Raw | ConvertFrom-Json
+    $extensions = @($extConfig.extensions)
+    
+    if ($extensions.Count -gt 0) {
+      Write-Host "Installing VS Code extensions..."
+      foreach ($ext in $extensions) {
+        try {
+          code --install-extension $ext --force | Out-Host
+        } catch {
+          Write-Warning "Failed installing VS Code extension $ext: $($_.Exception.Message)"
+        }
       }
     }
+  } else {
+    Write-Host "No vscode-extensions.json found. Skipping extensions."
   }
 } else {
   Write-Warning "VS Code CLI ('code') not found in PATH. Open VS Code once and enable 'Shell Command: Install 'code' command in PATH', then re-run this script."
