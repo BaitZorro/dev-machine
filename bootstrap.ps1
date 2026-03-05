@@ -45,8 +45,9 @@ function Test-WSLAvailable {
   }
   
   try {
-    $distros = wsl -l -q 2>$null
-    return ($distros -match $DistroName)
+    # WSL outputs UTF-16 with null bytes - remove them for proper matching
+    $distros = (wsl -l -q 2>$null) -replace "`0", ""
+    return ($distros -match [regex]::Escape($DistroName))
   } catch {
     return $false
   }
