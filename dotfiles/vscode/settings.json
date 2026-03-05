@@ -1,0 +1,17 @@
+{
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  },
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "dotnetAcquisitionExtension.enableTelemetry": false,
+  "csharp.format.enable": true,
+  "csharp.semanticHighlighting.enabled": true,
+  "git.autofetch": true,
+  "git.confirmSync": false,
+  "git.enableSmartCommit": true,
+  "docker.dockerPath": "docker",
+  "remote.WSL.useShellEnvironment": true
+}

@@ -1,0 +1,25 @@
+# Windows / tooling
+.DS_Store
+Thumbs.db
+*.log
+
+# Secrets
+*.key
+*.pem
+*.pfx
+*.snk
+.env
+.env.*
+!dotfiles/vscode/.env.example
+
+# Rider / JetBrains caches (do not commit)
+.idea/
+**/.idea/
+**/system/
+**/caches/
+
+# Node
+node_modules/
+
+# Local state
+.local/

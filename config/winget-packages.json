@@ -1,0 +1,136 @@
+{
+  "core": [
+    {
+      "id": "Microsoft.WindowsTerminal",
+      "name": "Windows Terminal",
+      "scope": "user"
+    },
+    {
+      "id": "Git.Git",
+      "name": "Git",
+      "scope": "machine"
+    },
+    {
+      "id": "GitHub.GitLFS",
+      "name": "Git LFS",
+      "scope": "machine"
+    },
+    {
+      "id": "GitHub.cli",
+      "name": "GitHub CLI",
+      "scope": "machine"
+    },
+    {
+      "id": "Microsoft.DotNet.SDK.10",
+      "name": ".NET SDK 10",
+      "scope": "machine"
+    },
+    {
+      "id": "JetBrains.Rider",
+      "name": "JetBrains Rider",
+      "scope": "machine"
+    },
+    {
+      "id": "Microsoft.PowerShell",
+      "name": "PowerShell 7",
+      "scope": "machine"
+    },
+    {
+      "id": "Canonical.Ubuntu.2404",
+      "name": "Ubuntu 24.04 LTS (WSL)",
+      "scope": "user"
+    },
+    {
+      "id": "Docker.DockerDesktop",
+      "name": "Docker Desktop",
+      "scope": "machine"
+    }
+  ],
+  "dev": [
+    {
+      "id": "Microsoft.VisualStudioCode",
+      "name": "Visual Studio Code",
+      "scope": "machine"
+    },
+    {
+      "id": "Microsoft.PowerToys",
+      "name": "PowerToys",
+      "scope": "machine"
+    },
+    {
+      "id": "DevToys-app.DevToys",
+      "name": "DevToys",
+      "scope": "user"
+    },
+    {
+      "id": "Postman.Postman",
+      "name": "Postman",
+      "scope": "user"
+    },
+    {
+      "id": "Microsoft.AzureCLI",
+      "name": "Azure CLI",
+      "scope": "machine"
+    },
+    {
+      "id": "Kubernetes.kubectl",
+      "name": "kubectl",
+      "scope": "machine"
+    },
+    {
+      "id": "Helm.Helm",
+      "name": "Helm",
+      "scope": "machine"
+    },
+    {
+      "id": "Ngrok.Ngrok",
+      "name": "ngrok",
+      "scope": "machine"
+    },
+    {
+      "id": "Notion.Notion",
+      "name": "Notion",
+      "scope": "user"
+    },
+    {
+      "id": "LINQPad.LINQPad",
+      "name": "LINQPad",
+      "scope": "machine"
+    },
+    {
+      "id": "CoreyButler.NVMforWindows",
+      "name": "NVM for Windows",
+      "scope": "machine"
+    },
+    {
+      "id": "7zip.7zip",
+      "name": "7-Zip",
+      "scope": "machine"
+    },
+    {
+      "id": "Microsoft.Sysinternals",
+      "name": "Sysinternals Suite",
+      "scope": "user"
+    },
+    {
+      "id": "JanDeDobbeleer.OhMyPosh",
+      "name": "Oh My Posh",
+      "scope": "user"
+    }
+  ],
+  "optional": [
+    {
+      "id": "Spotify.Spotify",
+      "name": "Spotify",
+      "scope": "user"
+    }
+  ],
+  "vscodeExtensions": [
+    "ms-dotnettools.csharp",
+    "ms-azuretools.vscode-docker",
+    "ms-vscode.azure-account",
+    "eamodio.gitlens",
+    "github.copilot",
+    "ms-vscode.powershell"
+  ]
+}
