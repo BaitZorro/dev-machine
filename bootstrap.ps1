@@ -138,16 +138,43 @@ function Invoke-Export {
     Write-Warning "VS Code user folder not found at $vscodeUser"
   }
   
-  # Export VS Code extensions list
-  if (Get-Command code -ErrorAction SilentlyContinue) {
-    Write-Host "Exporting VS Code extensions list..."
-    $extensions = @(code --list-extensions)
+  # Export VS Code extensions list (read from filesystem to avoid launching VS Code)
+  Write-Host "Exporting VS Code extensions list..."
+  $vscodeExtDir = Join-Path $env:USERPROFILE ".vscode\extensions"
+  
+  if (Test-Path $vscodeExtDir) {
+    $extensions = @()
+    $extFolders = Get-ChildItem -Path $vscodeExtDir -Directory -ErrorAction SilentlyContinue
     
-    $extensionsFile = Join-Path $configDir "vscode-extensions.json"
-    @{ extensions = $extensions } | ConvertTo-Json -Depth 10 | Set-Content $extensionsFile -Encoding UTF8
-    Write-Host "Exported VS Code extensions to: vscode-extensions.json"
+    foreach ($folder in $extFolders) {
+      # Read package.json to get accurate extension ID
+      $packageJson = Join-Path $folder.FullName "package.json"
+      if (Test-Path $packageJson) {
+        try {
+          $pkg = Get-Content $packageJson -Raw | ConvertFrom-Json
+          if ($pkg.publisher -and $pkg.name) {
+            $extensions += "$($pkg.publisher).$($pkg.name)"
+          }
+        } catch {
+          # Fallback: parse folder name (publisher.name-version)
+          if ($folder.Name -match '^(.+)-\d+\.\d+\.\d+') {
+            $extensions += $Matches[1]
+          }
+        }
+      }
+    }
+    
+    $extensions = $extensions | Sort-Object -Unique
+    
+    if ($extensions.Count -gt 0) {
+      $extensionsFile = Join-Path $configDir "vscode-extensions.json"
+      @{ extensions = $extensions } | ConvertTo-Json -Depth 10 | Set-Content $extensionsFile -Encoding UTF8
+      Write-Host "Exported $($extensions.Count) VS Code extensions to: vscode-extensions.json"
+    } else {
+      Write-Host "No VS Code extensions found to export."
+    }
   } else {
-    Write-Warning "VS Code CLI ('code') not found. Skipping extensions export."
+    Write-Warning "VS Code extensions folder not found at $vscodeExtDir"
   }
   
   # Export installed WinGet packages
@@ -156,28 +183,29 @@ function Invoke-Export {
     Write-Host "Exporting installed WinGet packages..."
     
     try {
-      # Get installed packages in JSON format
-      $installedJson = winget export -o - --accept-source-agreements 2>$null
-      if ($installedJson) {
-        $packagesFile = Join-Path $configDir "winget-packages.json"
-        $installedJson | Set-Content $packagesFile -Encoding UTF8
-        Write-Host "Exported WinGet packages to: winget-packages.json"
+      $packagesFile = Join-Path $configDir "winget-packages.json"
+      $tempFile = Join-Path $env:TEMP "winget-export-temp.json"
+      
+      # Export to temp file (winget export writes JSON to file, warnings to console)
+      $null = winget export -o $tempFile --accept-source-agreements 2>&1
+      
+      if (Test-Path $tempFile) {
+        # Read and validate JSON
+        $content = Get-Content $tempFile -Raw
+        $parsed = $content | ConvertFrom-Json
+        
+        # Write validated JSON to destination
+        $content | Set-Content $packagesFile -Encoding UTF8
+        Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+        
+        $packageCount = ($parsed.Sources | ForEach-Object { $_.Packages.Count } | Measure-Object -Sum).Sum
+        Write-Host "Exported $packageCount WinGet packages to: winget-packages.json"
       } else {
-        # Fallback: parse list output
-        Write-Host "Using fallback method to export packages..."
-        $packages = @()
-        $listOutput = winget list --accept-source-agreements 2>$null | Select-Object -Skip 2
-        foreach ($line in $listOutput) {
-          if ($line -match '^\s*(.+?)\s{2,}(\S+)\s') {
-            $packages += @{ name = $Matches[1].Trim(); id = $Matches[2].Trim() }
-          }
-        }
-        $packagesFile = Join-Path $configDir "winget-packages.json"
-        @{ packages = $packages } | ConvertTo-Json -Depth 10 | Set-Content $packagesFile -Encoding UTF8
-        Write-Host "Exported WinGet packages to: winget-packages.json"
+        Write-Warning "WinGet export failed - no output file created."
       }
     } catch {
       Write-Warning "Failed to export WinGet packages: $($_.Exception.Message)"
+      Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
     }
   } else {
     Write-Warning "WinGet not found. Skipping packages export."
