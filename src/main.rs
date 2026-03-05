@@ -32,8 +32,8 @@ fn main() -> ExitCode {
     // Determine config root (from args or current directory)
     let config_root = get_config_root(&cli.command);
 
-    // Verify config root exists
-    if !config_root.exists() {
+    // Verify config root exists (except for export, which creates it)
+    if !matches!(cli.command, Command::Export(_)) && !config_root.exists() {
         output::error(&format!(
             "Config root does not exist: {}",
             config_root.display()

@@ -4,14 +4,45 @@
 
 use crate::cli::ExportArgs;
 use crate::components::{Exportable, Git, PowerShell, VsCode, WinGet, Wsl};
-use crate::error::Result;
+use crate::error::{BootstrapError, Result};
 use crate::output;
+use std::fs;
 use std::path::Path;
+
+/// Check if a directory has any contents.
+fn is_dir_non_empty(path: &Path) -> bool {
+    if !path.exists() {
+        return false;
+    }
+    match fs::read_dir(path) {
+        Ok(mut entries) => entries.next().is_some(),
+        Err(_) => false,
+    }
+}
 
 /// Execute the export command.
 pub fn execute(args: &ExportArgs, config_root: &Path) -> Result<()> {
     output::section("Exporting Configuration");
     output::kv("Config Root", &config_root.display().to_string());
+
+    // Create config root if it doesn't exist
+    if !config_root.exists() {
+        output::info(&format!("Creating config directory: {}", config_root.display()));
+        fs::create_dir_all(config_root).map_err(|e| BootstrapError::io(config_root, e))?;
+    }
+
+    // Check if target directories are non-empty (only if not forcing)
+    if !args.force {
+        let dotfiles_dir = config_root.join("dotfiles");
+        let config_dir = config_root.join("config");
+
+        if is_dir_non_empty(&dotfiles_dir) || is_dir_non_empty(&config_dir) {
+            output::warning("Export directory is not empty. Existing files may be overwritten.");
+            return Err(BootstrapError::Config(
+                "Use --force (-f) to overwrite existing configuration files.".to_string(),
+            ));
+        }
+    }
 
     // Determine which components to export
     let all = !args.vscode && !args.winget && !args.powershell && !args.git && !args.wsl;

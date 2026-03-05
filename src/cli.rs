@@ -35,56 +35,88 @@ pub enum Command {
 #[derive(Parser, Debug)]
 pub struct SetupArgs {
     /// Path to the configuration root (contains dotfiles/ and config/ folders)
-    #[arg(default_value = ".")]
-    pub config_root: PathBuf,
+    #[arg(long, short = 'c')]
+    pub config_root: Option<PathBuf>,
 
-    /// Minimal installation (skip optional packages)
+    /// Only set up VS Code settings and extensions
     #[arg(long)]
-    pub minimal: bool,
+    pub vscode: bool,
 
-    /// Skip Docker installation
+    /// Only install WinGet packages
     #[arg(long)]
-    pub skip_docker: bool,
+    pub winget: bool,
 
-    /// Skip WSL installation and provisioning
+    /// Only set up PowerShell profile
     #[arg(long)]
-    pub skip_wsl: bool,
+    pub powershell: bool,
 
-    /// Skip WSL provisioning (WSL will be installed but not configured)
+    /// Only set up Git configuration
     #[arg(long)]
-    pub no_wsl_provision: bool,
+    pub git: bool,
 
-    /// URL to external dotfiles repository to clone
+    /// Only set up WSL dotfiles
     #[arg(long)]
-    pub dotfiles_repo: Option<String>,
-}
-
-/// Arguments for the export command.
-#[derive(Parser, Debug)]
-pub struct ExportArgs {
-    /// Path to export configuration to
-    #[arg(default_value = ".")]
-    pub config_root: PathBuf,
-
-    /// Skip WSL dotfiles export
-    #[arg(long)]
-    pub skip_wsl: bool,
+    pub wsl: bool,
 
     /// WSL distribution name
     #[arg(long, default_value = "Ubuntu-24.04")]
     pub wsl_distro: String,
 }
 
+/// Arguments for the export command.
+#[derive(Parser, Debug)]
+pub struct ExportArgs {
+    /// Path to export configuration to
+    #[arg(long, short = 'c')]
+    pub config_root: Option<PathBuf>,
+
+    /// Only export VS Code settings and extensions
+    #[arg(long)]
+    pub vscode: bool,
+
+    /// Only export WinGet packages
+    #[arg(long)]
+    pub winget: bool,
+
+    /// Only export PowerShell profile
+    #[arg(long)]
+    pub powershell: bool,
+
+    /// Only export Git configuration
+    #[arg(long)]
+    pub git: bool,
+
+    /// Only export WSL dotfiles
+    #[arg(long)]
+    pub wsl: bool,
+
+    /// WSL distribution name
+    #[arg(long, default_value = "Ubuntu-24.04")]
+    pub wsl_distro: String,
+
+    /// Force overwrite if export directory is not empty
+    #[arg(long, short = 'f')]
+    pub force: bool,
+}
+
 /// Arguments for the upgrade command.
 #[derive(Parser, Debug)]
 pub struct UpgradeArgs {
     /// Path to configuration root (for extension lists)
-    #[arg(default_value = ".")]
-    pub config_root: PathBuf,
+    #[arg(long, short = 'c')]
+    pub config_root: Option<PathBuf>,
 
-    /// Skip WSL package upgrades
+    /// Only upgrade VS Code extensions
     #[arg(long)]
-    pub skip_wsl: bool,
+    pub vscode: bool,
+
+    /// Only upgrade WinGet packages
+    #[arg(long)]
+    pub winget: bool,
+
+    /// Only upgrade WSL packages
+    #[arg(long)]
+    pub wsl: bool,
 
     /// WSL distribution name
     #[arg(long, default_value = "Ubuntu-24.04")]

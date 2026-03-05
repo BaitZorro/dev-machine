@@ -5,10 +5,26 @@ A CLI tool for managing development machine configuration across multiple machin
 ## Prerequisites
 
 - **Rust** (1.70 or later) - Required to build the project
+- **Visual Studio Build Tools** - Required for Rust to compile native code on Windows
 - **Windows 10/11** - This tool is designed for Windows development environments
 - **Optional:** WSL with Ubuntu for Linux dotfile management
 
 ## Installing Prerequisites
+
+### Install Visual Studio Build Tools
+
+Rust requires the MSVC C++ build tools for linking on Windows:
+
+```powershell
+winget install Microsoft.VisualStudio.2022.BuildTools
+```
+
+During installation, select the **"Desktop development with C++"** workload, or run:
+
+```powershell
+# Install with required components via command line
+winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
 
 ### Install Rust
 
