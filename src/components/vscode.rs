@@ -188,9 +188,7 @@ impl Importable for VsCode {
         // Install extensions
         if let Some(config) = self.load_extensions_config(config_root)? {
             if !shell::command_exists("code") {
-                output::warning(
-                    "VS Code CLI ('code') not found. Install VS Code and add to PATH.",
-                );
+                output::warning("VS Code CLI ('code') not found. Install VS Code and add to PATH.");
                 return Ok(());
             }
 

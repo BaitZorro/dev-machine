@@ -8,7 +8,8 @@ use std::path::PathBuf;
 
 /// Get the user's home directory.
 pub fn home_dir() -> Result<PathBuf> {
-    dirs::home_dir().ok_or_else(|| BootstrapError::Path("Could not determine home directory".into()))
+    dirs::home_dir()
+        .ok_or_else(|| BootstrapError::Path("Could not determine home directory".into()))
 }
 
 /// Get the APPDATA directory (%APPDATA%).
@@ -38,7 +39,9 @@ pub fn vscode_extensions_dir() -> Result<PathBuf> {
 pub fn powershell_profile_path() -> Result<PathBuf> {
     let docs = dirs::document_dir()
         .ok_or_else(|| BootstrapError::Path("Could not determine Documents directory".into()))?;
-    Ok(docs.join("PowerShell").join("Microsoft.PowerShell_profile.ps1"))
+    Ok(docs
+        .join("PowerShell")
+        .join("Microsoft.PowerShell_profile.ps1"))
 }
 
 /// Get the global Git config path.
@@ -83,8 +86,7 @@ pub fn ensure_dir(path: &std::path::Path) -> Result<()> {
 pub fn resolve_path(path: &std::path::Path) -> Result<PathBuf> {
     std::fs::canonicalize(path).or_else(|_| {
         // If path doesn't exist yet, resolve relative to current dir
-        let current = std::env::current_dir()
-            .map_err(|e| BootstrapError::io(path, e))?;
+        let current = std::env::current_dir().map_err(|e| BootstrapError::io(path, e))?;
         Ok(current.join(path))
     })
 }

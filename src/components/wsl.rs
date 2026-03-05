@@ -154,9 +154,8 @@ impl Exportable for Wsl {
 
         // Export list of installed apt packages
         output::info("Exporting installed apt packages list...");
-        let apt_result = self.run_wsl(
-            "apt list --installed 2>/dev/null | grep -v 'Listing...' | cut -d'/' -f1",
-        )?;
+        let apt_result = self
+            .run_wsl("apt list --installed 2>/dev/null | grep -v 'Listing...' | cut -d'/' -f1")?;
 
         let packages_file = wsl_export_path.join("installed-packages.txt");
         fs::write(&packages_file, apt_result.stdout)

@@ -44,7 +44,8 @@ impl Exportable for PowerShell {
         let dest_path = dotfiles_path.join("Microsoft.PowerShell_profile.ps1");
 
         if profile_path.exists() {
-            fs::copy(&profile_path, &dest_path).map_err(|e| BootstrapError::io(&profile_path, e))?;
+            fs::copy(&profile_path, &dest_path)
+                .map_err(|e| BootstrapError::io(&profile_path, e))?;
             output::success("Exported PowerShell profile");
         } else {
             // Try to copy default profile from repo if available

@@ -27,7 +27,10 @@ pub fn execute(args: &ExportArgs, config_root: &Path) -> Result<()> {
 
     // Create config root if it doesn't exist
     if !config_root.exists() {
-        output::info(&format!("Creating config directory: {}", config_root.display()));
+        output::info(&format!(
+            "Creating config directory: {}",
+            config_root.display()
+        ));
         fs::create_dir_all(config_root).map_err(|e| BootstrapError::io(config_root, e))?;
     }
 
