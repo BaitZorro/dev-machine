@@ -33,6 +33,58 @@ function Test-IsAdmin {
   $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+# ============================================================================
+# WSL HELPER FUNCTIONS
+# ============================================================================
+function Test-WSLAvailable {
+  param([string]$DistroName = "Ubuntu-24.04")
+  
+  if (-not (Get-Command wsl -ErrorAction SilentlyContinue)) {
+    return $false
+  }
+  
+  try {
+    $distros = wsl -l -q 2>$null
+    return ($distros -match $DistroName)
+  } catch {
+    return $false
+  }
+}
+
+function ConvertTo-WSLPath {
+  param([string]$WindowsPath)
+  $drive = $WindowsPath.Substring(0,1).ToLower()
+  $rest = $WindowsPath.Substring(2).Replace("\","/")
+  return "/mnt/$drive$rest"
+}
+
+function Invoke-WSLCommand {
+  param(
+    [string]$Command,
+    [string]$DistroName = "Ubuntu-24.04"
+  )
+  wsl -d $DistroName -- bash -c $Command
+}
+
+# WSL dotfiles to export/import (relative to home directory)
+$script:WSLDotfiles = @(
+  ".bashrc",
+  ".zshrc",
+  ".profile",
+  ".bash_profile",
+  ".bash_aliases",
+  ".gitconfig",
+  ".vimrc",
+  ".tmux.conf"
+)
+
+# WSL directories to export/import
+$script:WSLDotDirs = @(
+  ".ssh",
+  ".config/starship",
+  ".oh-my-zsh/custom"
+)
+
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # Resolve ConfigRoot - default to repoRoot if not specified
@@ -137,6 +189,145 @@ function Invoke-Export {
   Write-Host "  - dotfiles/powershell/"
   Write-Host "  - dotfiles/git/"
   Write-Host "  - config/winget-packages.json (extensions list)"
+  
+  # Export WSL dotfiles
+  Export-WSLDotfiles -ConfigRoot $ConfigRoot
+}
+
+# ============================================================================
+# WSL EXPORT FUNCTION
+# ============================================================================
+function Export-WSLDotfiles {
+  param(
+    [string]$ConfigRoot,
+    [string]$DistroName = "Ubuntu-24.04"
+  )
+  
+  Write-Section "Export WSL Dotfiles"
+  
+  if (-not (Test-WSLAvailable -DistroName $DistroName)) {
+    Write-Warning "WSL distro '$DistroName' not available. Skipping WSL export."
+    return
+  }
+  
+  $wslExportPath = Join-Path $ConfigRoot "dotfiles\wsl"
+  New-Item -ItemType Directory -Force -Path $wslExportPath | Out-Null
+  
+  # Get WSL home directory path  
+  $wslHome = (Invoke-WSLCommand -Command 'echo $HOME' -DistroName $DistroName).Trim()
+  Write-Host "WSL Home: $wslHome"
+  
+  # Export individual dotfiles
+  foreach ($dotfile in $script:WSLDotfiles) {
+    $wslFilePath = "$wslHome/$dotfile"
+    $exists = Invoke-WSLCommand -Command "test -f '$wslFilePath' && echo 'yes' || echo 'no'" -DistroName $DistroName
+    
+    if ($exists.Trim() -eq "yes") {
+      $destFile = Join-Path $wslExportPath $dotfile
+      $destDir = Split-Path -Parent $destFile
+      New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+      
+      # Read file content from WSL and write to Windows
+      $content = Invoke-WSLCommand -Command "cat '$wslFilePath'" -DistroName $DistroName
+      $content | Set-Content -Path $destFile -Encoding UTF8 -NoNewline
+      Write-Host "Exported: $dotfile"
+    }
+  }
+  
+  # Export directories
+  foreach ($dotdir in $script:WSLDotDirs) {
+    $wslDirPath = "$wslHome/$dotdir"
+    $exists = Invoke-WSLCommand -Command "test -d '$wslDirPath' && echo 'yes' || echo 'no'" -DistroName $DistroName
+    
+    if ($exists.Trim() -eq "yes") {
+      $destDir = Join-Path $wslExportPath $dotdir
+      New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+      
+      # Use tar to copy directory contents
+      $wslDestPath = ConvertTo-WSLPath -WindowsPath $destDir
+      Invoke-WSLCommand -Command "cd '$wslDirPath' && tar cf - . 2>/dev/null | (cd '$wslDestPath' && tar xf -)" -DistroName $DistroName
+      Write-Host "Exported directory: $dotdir/"
+      
+      # Special warning for .ssh
+      if ($dotdir -eq ".ssh") {
+        Write-Host "  [!] Note: .ssh contains sensitive keys. Review before committing to version control." -ForegroundColor Yellow
+      }
+    }
+  }
+  
+  # Export list of installed apt packages (for reference)
+  Write-Host "Exporting installed apt packages list..."
+  $aptPackages = Invoke-WSLCommand -Command "apt list --installed 2>/dev/null | grep -v 'Listing...' | cut -d'/' -f1" -DistroName $DistroName
+  $aptPackages | Set-Content -Path (Join-Path $wslExportPath "installed-packages.txt") -Encoding UTF8
+  
+  Write-Host "WSL dotfiles exported to: $wslExportPath"
+}
+
+# ============================================================================
+# WSL IMPORT FUNCTION
+# ============================================================================
+function Import-WSLDotfiles {
+  param(
+    [string]$ConfigRoot,
+    [string]$DistroName = "Ubuntu-24.04"
+  )
+  
+  Write-Section "Import WSL Dotfiles"
+  
+  if (-not (Test-WSLAvailable -DistroName $DistroName)) {
+    Write-Warning "WSL distro '$DistroName' not available. Skipping WSL dotfiles import."
+    return
+  }
+  
+  $wslImportPath = Join-Path $ConfigRoot "dotfiles\wsl"
+  if (-not (Test-Path $wslImportPath)) {
+    Write-Warning "No WSL dotfiles found at $wslImportPath. Skipping."
+    return
+  }
+  
+  # Get WSL home directory path
+  $wslHome = (Invoke-WSLCommand -Command 'echo $HOME' -DistroName $DistroName).Trim()
+  Write-Host "WSL Home: $wslHome"
+  
+  # Import individual dotfiles
+  foreach ($dotfile in $script:WSLDotfiles) {
+    $srcFile = Join-Path $wslImportPath $dotfile
+    if (Test-Path $srcFile) {
+      $wslDestPath = "$wslHome/$dotfile"
+      $wslSrcPath = ConvertTo-WSLPath -WindowsPath $srcFile
+      
+      # Backup existing file if it exists
+      Invoke-WSLCommand -Command "if [ -f '$wslDestPath' ]; then cp '$wslDestPath' '$wslDestPath.backup' 2>/dev/null || true; fi" -DistroName $DistroName
+      
+      # Copy file
+      Invoke-WSLCommand -Command "cp '$wslSrcPath' '$wslDestPath'" -DistroName $DistroName
+      Write-Host "Imported: $dotfile"
+    }
+  }
+  
+  # Import directories
+  foreach ($dotdir in $script:WSLDotDirs) {
+    $srcDir = Join-Path $wslImportPath $dotdir
+    if (Test-Path $srcDir) {
+      $wslDestDir = "$wslHome/$dotdir"
+      $wslSrcPath = ConvertTo-WSLPath -WindowsPath $srcDir
+      
+      # Create destination directory
+      Invoke-WSLCommand -Command "mkdir -p '$wslDestDir'" -DistroName $DistroName
+      
+      # Copy directory contents using tar
+      Invoke-WSLCommand -Command "cd '$wslSrcPath' && tar cf - . 2>/dev/null | (cd '$wslDestDir' && tar xf -)" -DistroName $DistroName
+      Write-Host "Imported directory: $dotdir/"
+      
+      # Fix permissions for .ssh
+      if ($dotdir -eq ".ssh") {
+        Write-Host "  Setting correct permissions for .ssh..."
+        Invoke-WSLCommand -Command "chmod 700 '$wslDestDir' && chmod 600 '$wslDestDir'/* 2>/dev/null || true && chmod 644 '$wslDestDir'/*.pub 2>/dev/null || true" -DistroName $DistroName
+      }
+    }
+  }
+  
+  Write-Host "WSL dotfiles imported successfully."
 }
 
 # ============================================================================
@@ -208,6 +399,9 @@ function Invoke-Setup {
   if (-not $SkipWSL -and -not $NoWSLProvision) {
     Write-Section "Provision WSL (Ubuntu)"
     & (Join-Path $RepoRoot "scripts\configure-wsl.ps1") -RepoRoot $ConfigRoot
+    
+    # Import WSL dotfiles after provisioning
+    Import-WSLDotfiles -ConfigRoot $ConfigRoot
   } else {
     Write-Host "WSL provisioning skipped."
   }

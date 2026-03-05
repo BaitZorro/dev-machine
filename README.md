@@ -44,7 +44,27 @@ This will create/update:
 - `dotfiles/vscode/` — VS Code settings and keybindings
 - `dotfiles/powershell/` — PowerShell profile
 - `dotfiles/git/` — Git configuration
+- `dotfiles/wsl/` — WSL dotfiles (see below)
 - `config/winget-packages.json` — VS Code extensions list
+
+### WSL Dotfiles
+
+Both `setup` and `export` handle WSL (Ubuntu) dotfiles:
+
+**Exported/Imported files:**
+- `.bashrc`, `.zshrc`, `.profile`, `.bash_profile`, `.bash_aliases`
+- `.gitconfig` (WSL-specific)
+- `.vimrc`, `.tmux.conf`
+
+**Exported/Imported directories:**
+- `.ssh/` — SSH keys and config (⚠️ contains sensitive data)
+- `.config/starship/` — Starship prompt config
+- `.oh-my-zsh/custom/` — Custom oh-my-zsh themes and plugins
+
+**Also exported (for reference):**
+- `installed-packages.txt` — List of installed apt packages
+
+> **Note:** The `.ssh` directory contains sensitive keys. Review contents before committing to version control. Consider using `.gitignore` to exclude private keys.
 
 ### Spotify (non-admin)
 
@@ -60,6 +80,10 @@ If Spotify fails (common when running elevated), run it separately in a **non-ad
 - `config/winget-packages.json` — package list (edit to taste)
 - `scripts/` — install/config scripts
 - `dotfiles/` — version-controlled settings copied into place
+  - `vscode/` — VS Code settings
+  - `powershell/` — PowerShell profile
+  - `git/` — Git configuration
+  - `wsl/` — WSL dotfiles (.bashrc, .zshrc, .ssh, etc.)
 - `wsl/` — scripts that run inside Ubuntu
 
 ## Customize
@@ -68,6 +92,8 @@ If Spotify fails (common when running elevated), run it separately in a **non-ad
 - VS Code settings: `dotfiles/vscode/`
 - PowerShell profile: `dotfiles/powershell/Microsoft.PowerShell_profile.ps1`
 - Git defaults: `dotfiles/git/.gitconfig`
+- WSL shell configs: `dotfiles/wsl/.bashrc`, `dotfiles/wsl/.zshrc`
+- WSL SSH keys: `dotfiles/wsl/.ssh/`
 
 ## Notes
 
