@@ -1,9 +1,20 @@
 <# 
   bootstrap.ps1
   Orchestrates: winget installs + config steps + optional WSL provisioning
+  
+  Usage:
+    bootstrap.ps1 setup <path-to-configroot>   # Install and configure using config from path
+    bootstrap.ps1 export <path-to-configroot>  # Export current settings to config path
 #>
 [CmdletBinding()]
 param(
+  [Parameter(Position=0)]
+  [ValidateSet("setup", "export")]
+  [string]$Command = "setup",
+  
+  [Parameter(Position=1)]
+  [string]$ConfigRoot = "",
+  
   [switch]$Minimal,
   [switch]$SkipDocker,
   [switch]$SkipWSL,
@@ -22,63 +33,208 @@ function Test-IsAdmin {
   $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-Write-Section "Preflight"
-if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-  throw "WinGet not found. Install 'App Installer' from Microsoft Store, then re-run."
-}
-
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$configPath = Join-Path $repoRoot "config\winget-packages.json"
-if (-not (Test-Path $configPath)) { throw "Missing config: $configPath" }
 
-$isAdmin = Test-IsAdmin
-Write-Host ("Running as Admin: " + $isAdmin)
-
-# Optional external dotfiles repo
-if ($DotfilesRepo -and -not (Test-Path (Join-Path $repoRoot "dotfiles\.external"))) {
-  Write-Section "Cloning external dotfiles"
-  $dest = Join-Path $repoRoot "dotfiles\.external"
-  git clone $DotfilesRepo $dest
-  Write-Host "External dotfiles cloned to: $dest"
-  Write-Host "You can now point scripts to it by setting -DotfilesRepo or editing scripts."
-}
-
-Write-Section "Update WinGet sources"
-try { winget source update | Out-Host } catch { Write-Warning $_.Exception.Message }
-
-# Install packages
-Write-Section "Install packages"
-& (Join-Path $repoRoot "scripts\winget-install.ps1") `
-  -ConfigPath $configPath `
-  -Minimal:$Minimal `
-  -SkipDocker:$SkipDocker `
-  -SkipWSL:$SkipWSL `
-  -SkipSpotify:$SkipSpotify `
-  -OnlySpotify:$OnlySpotify
-
-if ($OnlySpotify) { return }
-
-# Configure pieces
-Write-Section "Configure Git"
-& (Join-Path $repoRoot "scripts\configure-git.ps1") -RepoRoot $repoRoot
-
-Write-Section "Configure PowerShell"
-& (Join-Path $repoRoot "scripts\configure-powershell.ps1") -RepoRoot $repoRoot
-
-Write-Section "Configure VS Code"
-& (Join-Path $repoRoot "scripts\configure-vscode.ps1") -RepoRoot $repoRoot -ConfigPath $configPath
-
-Write-Section "Configure Rider (optional settings copy)"
-& (Join-Path $repoRoot "scripts\configure-rider.ps1") -RepoRoot $repoRoot
-
-# Optional: provision WSL (installs zsh, tools, etc. inside Ubuntu)
-if (-not $SkipWSL -and -not $NoWSLProvision) {
-  Write-Section "Provision WSL (Ubuntu)"
-  & (Join-Path $repoRoot "scripts\configure-wsl.ps1") -RepoRoot $repoRoot
+# Resolve ConfigRoot - default to repoRoot if not specified
+if ([string]::IsNullOrWhiteSpace($ConfigRoot)) {
+  $ConfigRoot = $repoRoot
 } else {
-  Write-Host "WSL provisioning skipped."
+  # Resolve to absolute path
+  $ConfigRoot = [System.IO.Path]::GetFullPath($ConfigRoot)
 }
 
-Write-Section "Done"
-Write-Host "If WSL features were newly enabled, a reboot may be required."
-Write-Host "If Docker prompts for WSL2 backend or requires reboot/logout, do that before using it."
+$configPath = Join-Path $ConfigRoot "config\winget-packages.json"
+$dotfilesPath = Join-Path $ConfigRoot "dotfiles"
+
+# ============================================================================
+# EXPORT COMMAND
+# ============================================================================
+function Invoke-Export {
+  param([string]$ConfigRoot)
+  
+  Write-Section "Export Configuration"
+  Write-Host "Exporting current settings to: $ConfigRoot"
+  
+  # Create directory structure
+  $dotfilesPath = Join-Path $ConfigRoot "dotfiles"
+  $configDir = Join-Path $ConfigRoot "config"
+  
+  New-Item -ItemType Directory -Force -Path $dotfilesPath | Out-Null
+  New-Item -ItemType Directory -Force -Path $configDir | Out-Null
+  
+  # Export VS Code settings
+  Write-Section "Export VS Code"
+  $vscodeUser = Join-Path $env:APPDATA "Code\User"
+  $vscodeExport = Join-Path $dotfilesPath "vscode"
+  
+  if (Test-Path $vscodeUser) {
+    New-Item -ItemType Directory -Force -Path $vscodeExport | Out-Null
+    
+    $settingsFile = Join-Path $vscodeUser "settings.json"
+    $keybindingsFile = Join-Path $vscodeUser "keybindings.json"
+    
+    if (Test-Path $settingsFile) {
+      Copy-Item $settingsFile -Destination $vscodeExport -Force
+      Write-Host "Exported: settings.json"
+    }
+    if (Test-Path $keybindingsFile) {
+      Copy-Item $keybindingsFile -Destination $vscodeExport -Force
+      Write-Host "Exported: keybindings.json"
+    }
+  } else {
+    Write-Warning "VS Code user folder not found at $vscodeUser"
+  }
+  
+  # Export VS Code extensions list
+  if (Get-Command code -ErrorAction SilentlyContinue) {
+    Write-Host "Exporting VS Code extensions list..."
+    $extensions = code --list-extensions
+    
+    # Load existing config or create new
+    $configFile = Join-Path $configDir "winget-packages.json"
+    if (Test-Path $configFile) {
+      $config = Get-Content $configFile -Raw | ConvertFrom-Json
+    } else {
+      $config = @{
+        packages = @()
+        vscodeExtensions = @()
+      }
+    }
+    
+    $config.vscodeExtensions = @($extensions)
+    $config | ConvertTo-Json -Depth 10 | Set-Content $configFile -Encoding UTF8
+    Write-Host "Exported VS Code extensions to config"
+  }
+  
+  # Export PowerShell profile
+  Write-Section "Export PowerShell Profile"
+  $psExport = Join-Path $dotfilesPath "powershell"
+  New-Item -ItemType Directory -Force -Path $psExport | Out-Null
+  
+  if (Test-Path $PROFILE) {
+    Copy-Item $PROFILE -Destination (Join-Path $psExport "Microsoft.PowerShell_profile.ps1") -Force
+    Write-Host "Exported PowerShell profile"
+  } else {
+    Write-Warning "PowerShell profile not found at $PROFILE"
+  }
+  
+  # Export Git config
+  Write-Section "Export Git Config"
+  $gitExport = Join-Path $dotfilesPath "git"
+  New-Item -ItemType Directory -Force -Path $gitExport | Out-Null
+  
+  $globalGitConfig = Join-Path $env:USERPROFILE ".gitconfig"
+  if (Test-Path $globalGitConfig) {
+    Copy-Item $globalGitConfig -Destination (Join-Path $gitExport ".gitconfig") -Force
+    Write-Host "Exported .gitconfig"
+  } else {
+    Write-Warning "Global .gitconfig not found"
+  }
+  
+  Write-Section "Export Complete"
+  Write-Host "Configuration exported to: $ConfigRoot"
+  Write-Host "  - dotfiles/vscode/"
+  Write-Host "  - dotfiles/powershell/"
+  Write-Host "  - dotfiles/git/"
+  Write-Host "  - config/winget-packages.json (extensions list)"
+}
+
+# ============================================================================
+# SETUP COMMAND
+# ============================================================================
+function Invoke-Setup {
+  param(
+    [string]$ConfigRoot,
+    [string]$RepoRoot,
+    [string]$ConfigPath,
+    [switch]$Minimal,
+    [switch]$SkipDocker,
+    [switch]$SkipWSL,
+    [switch]$SkipSpotify,
+    [switch]$OnlySpotify,
+    [switch]$NoWSLProvision,
+    [string]$DotfilesRepo
+  )
+  
+  Write-Section "Preflight"
+  if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+    throw "WinGet not found. Install 'App Installer' from Microsoft Store, then re-run."
+  }
+  
+  if (-not (Test-Path $ConfigPath)) { throw "Missing config: $ConfigPath" }
+  
+  $isAdmin = Test-IsAdmin
+  Write-Host ("Running as Admin: " + $isAdmin)
+  Write-Host ("Config Root: " + $ConfigRoot)
+  
+  # Optional external dotfiles repo
+  if ($DotfilesRepo -and -not (Test-Path (Join-Path $ConfigRoot "dotfiles\.external"))) {
+    Write-Section "Cloning external dotfiles"
+    $dest = Join-Path $ConfigRoot "dotfiles\.external"
+    git clone $DotfilesRepo $dest
+    Write-Host "External dotfiles cloned to: $dest"
+    Write-Host "You can now point scripts to it by setting -DotfilesRepo or editing scripts."
+  }
+  
+  Write-Section "Update WinGet sources"
+  try { winget source update | Out-Host } catch { Write-Warning $_.Exception.Message }
+  
+  # Install packages
+  Write-Section "Install packages"
+  & (Join-Path $RepoRoot "scripts\winget-install.ps1") `
+    -ConfigPath $ConfigPath `
+    -Minimal:$Minimal `
+    -SkipDocker:$SkipDocker `
+    -SkipWSL:$SkipWSL `
+    -SkipSpotify:$SkipSpotify `
+    -OnlySpotify:$OnlySpotify
+  
+  if ($OnlySpotify) { return }
+  
+  # Configure pieces - use ConfigRoot for dotfiles location
+  Write-Section "Configure Git"
+  & (Join-Path $RepoRoot "scripts\configure-git.ps1") -RepoRoot $ConfigRoot
+  
+  Write-Section "Configure PowerShell"
+  & (Join-Path $RepoRoot "scripts\configure-powershell.ps1") -RepoRoot $ConfigRoot
+  
+  Write-Section "Configure VS Code"
+  & (Join-Path $RepoRoot "scripts\configure-vscode.ps1") -RepoRoot $ConfigRoot -ConfigPath $ConfigPath
+  
+  Write-Section "Configure Rider (optional settings copy)"
+  & (Join-Path $RepoRoot "scripts\configure-rider.ps1") -RepoRoot $ConfigRoot
+  
+  # Optional: provision WSL (installs zsh, tools, etc. inside Ubuntu)
+  if (-not $SkipWSL -and -not $NoWSLProvision) {
+    Write-Section "Provision WSL (Ubuntu)"
+    & (Join-Path $RepoRoot "scripts\configure-wsl.ps1") -RepoRoot $ConfigRoot
+  } else {
+    Write-Host "WSL provisioning skipped."
+  }
+  
+  Write-Section "Done"
+  Write-Host "If WSL features were newly enabled, a reboot may be required."
+  Write-Host "If Docker prompts for WSL2 backend or requires reboot/logout, do that before using it."
+}
+
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
+switch ($Command) {
+  "export" {
+    Invoke-Export -ConfigRoot $ConfigRoot
+  }
+  "setup" {
+    Invoke-Setup `
+      -ConfigRoot $ConfigRoot `
+      -RepoRoot $repoRoot `
+      -ConfigPath $configPath `
+      -Minimal:$Minimal `
+      -SkipDocker:$SkipDocker `
+      -SkipWSL:$SkipWSL `
+      -SkipSpotify:$SkipSpotify `
+      -OnlySpotify:$OnlySpotify `
+      -NoWSLProvision:$NoWSLProvision `
+      -DotfilesRepo $DotfilesRepo
+  }
+}

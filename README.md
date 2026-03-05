@@ -21,13 +21,37 @@ It installs and configures a workflow optimized for:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-.ootstrap.ps1
+.\bootstrap.ps1 setup
 ```
+
+### Using a custom config path
+
+You can specify a different config root (where `dotfiles/` and `config/` folders are located):
+
+```powershell
+.\bootstrap.ps1 setup C:\path\to\my-config
+```
+
+### Export current settings
+
+Export your current VS Code settings, PowerShell profile, Git config, and extensions list:
+
+```powershell
+.\bootstrap.ps1 export C:\path\to\backup-config
+```
+
+This will create/update:
+- `dotfiles/vscode/` — VS Code settings and keybindings
+- `dotfiles/powershell/` — PowerShell profile
+- `dotfiles/git/` — Git configuration
+- `config/winget-packages.json` — VS Code extensions list
+
+### Spotify (non-admin)
 
 If Spotify fails (common when running elevated), run it separately in a **non-admin** terminal:
 
 ```powershell
-.ootstrap.ps1 -OnlySpotify
+.\bootstrap.ps1 setup -OnlySpotify
 ```
 
 ## Repo structure
